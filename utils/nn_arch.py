@@ -21,6 +21,29 @@ class nn_models():
         x = x - self.vgg_mean
         return x[:, ::-1]
 
+    def linearModel(self):
+        model = Sequential()
+        #model.add(Dense(units=32, activation='relu', input_shape=self.ip_shape[1:], name='conv1'))
+        #model.add(Dense(units=32, activation='relu', name='dense1'))
+        model.add(Dense(units=32, activation='relu', input_shape=self.ip_shape[1:], name='dense2'))
+        model.add(Dense(units=1))
+        optimizer = keras.optimizers.RMSprop(0.0099)
+        model.compile(loss='mean_squared_error', optimizer=optimizer)
+        return model
+
+    def ResNet50(self):
+        resnet50 = keras.applications.ResNet50(include_top=False, input_shape=(250, 250, 3), weights='imagenet')
+        model = Sequential()
+        model.add(resnet50)
+        model.add(BatchNormalization())
+        model.add(Flatten())
+        #na gater
+        model.add(Dense(256, activation="relu", name='dense2'))
+        model.add(Dense(units=34, activation='softmax'))
+        sgd = keras.optimizers.SGD(lr=self.learning_rate, decay=1e-6, momentum=0.9, nesterov=True)
+        model.compile(loss='categorical_crossentropy', optimizer=sgd, metrics=["accuracy"])
+        return model
+
     def LeNet5(self):
         model = Sequential()
         model.add(Conv2D(filters=6, kernel_size=(3, 3), activation='relu', input_shape=self.ip_shape[1:], name='conv1'))
@@ -32,8 +55,8 @@ class nn_models():
         model.add(Dense(units=84, activation='relu', name='dense2'))
         #saida da rede 5 423 - 30 - 34
         model.add(Dense(units=34, activation='softmax', name='dense3'))
-        adam = keras.optimizers.Adam(lr=self.learning_rate, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
-        model.compile(loss='categorical_crossentropy', optimizer=adam, metrics=["accuracy"])
+        sgd = keras.optimizers.SGD(lr=self.learning_rate, decay=1e-6, momentum=0.9, nesterov=True)
+        model.compile(loss='categorical_crossentropy', optimizer=sgd, metrics=["accuracy"])
         return model
 
 

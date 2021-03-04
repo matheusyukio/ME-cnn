@@ -19,6 +19,8 @@ from keras import backend as K
 
 from sklearn.model_selection import train_test_split
 
+import scipy.io as sio
+
 class Gater(object):
     def __init__(self):
         self.experts = None
@@ -28,7 +30,7 @@ class Gater(object):
         self.iters = 3
         self.wm_xi = None
         #saida da rede 5 423 - 30 - 34
-        self.target = 34
+        self.target = 1
         self.early_stopping = CustomCallback()
         self.c = 1
         self.warn_log = [["Iter", "Expert Training Error", "Expert Val Error"]]
@@ -74,8 +76,8 @@ class Gater(object):
     def train_model(self, X, y, x_val, y_val, i):
         model = nn_models()
         model.ip_shape = X.shape
-        model = model.LeNet5()
-        model.fit(X, y, batch_size=8, epochs=80, validation_data=(x_val, y_val),
+        model = model.linearModel()
+        model.fit(X, y, batch_size=8, epochs=10, validation_data=(x_val, y_val),
                   verbose=1, callbacks=[self.early_stopping])
 
         yhat_train = model.predict(X, batch_size=8)
@@ -95,9 +97,9 @@ class Gater(object):
         return y
 
     def gater(self):
-        #output da saida da rede convolucional
+        #output da saida da rede convolucional dense2
         #dim_inputs_data = Input(shape=(84, ))
-        dim_inputs_data = Input(shape=(256,))
+        dim_inputs_data = Input(shape=(32,))
         dim_mlp_yhat = Input(shape=(self.target * self.experts,))
 
         layer_1 = Dense(50, activation='relu')(dim_inputs_data)
@@ -107,7 +109,7 @@ class Gater(object):
         layer_3 = Dense(self.experts, name='layer_op', activation='relu', use_bias=False)(layer_2_a)
         layer_4 = Lambda(self.tensor_product)([layer_3, dim_mlp_yhat])
         #saida da rede 5 423 - 30 - 34
-        layer_5 = Dense(34, activation='softmax')(layer_4)
+        layer_5 = Dense(1, activation='softmax')(layer_4)
 
         model = Model(inputs=[dim_inputs_data, dim_mlp_yhat], outputs=layer_5)
         model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
@@ -117,7 +119,7 @@ class Gater(object):
         print("############################# Prime Train ################################")
         model_prime = nn_models()
         model_prime.ip_shape = x_train.shape
-        model_p = model_prime.LeNet5()
+        model_p = model_prime.linearModel()
 
         model_prime = Model(inputs=model_p.input,
                             outputs=model_p.get_layer('dense2').output)
@@ -161,7 +163,7 @@ class Gater(object):
             history = model.fit([prime_op_tr, yhat_tr], y_train, shuffle=True,
                                 batch_size=8, verbose=1,
                                 validation_data=([prime_op_v, yhat_val], y_val),
-                                epochs=80, callbacks=[self.early_stopping])
+                                epochs=10, callbacks=[self.early_stopping])
 
             yhats_train = model.predict([prime_op_tr, yhat_tr], batch_size=8)
             yhats_test = model.predict([prime_op_tt, yhat_tt], batch_size=8)
@@ -188,32 +190,15 @@ PATH = os.getcwd()
 def main():
     start_time = time.time()
     print('##### NEW EXPERIMENT_' + str(start_time) + '_#####')
-    TRAIN = os.path.join(PATH, 'training_data_Inception2_5_1')
-    TEST = os.path.join(PATH, 'validation_data_Inception2_5_1')
-    epoch = 100
-    #423 classes para 5 imgs / 34 classes para 30 imgs
-    min_images_per_person = [30]
-    models = ["DeepFace"]
-    num_folds = 2
-    batch_sizes = [30]  # [2,4,8]
+    mat_contents = sio.loadmat('dados.mat')
 
-    #main execution
-    #for min_per_person in min_images_per_person:
-    min_per_person = min_images_per_person[0]
-    multi_data = get_mounted_data(min_per_person, min_per_person)
-    data_x, data_y = transform_image_dataframe_to_matrix(multi_data, 250, 250, 'lfw-dataset/lfw-deepfunneled/lfw-deepfunneled/')
 
-    mean_image = np.mean(data_x, axis=0)
+    X_train, X_test, y_train, y_test = train_test_split(mat_contents['X'], mat_contents['Y'], test_size=0.2, random_state=1, stratify=mat_contents['Y'])
 
-    X_train, X_test, y_train, y_test = train_test_split(data_x, data_y, test_size=0.2, random_state=1, stratify=data_y)
     X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.25, random_state=1, stratify=y_train)
 
-    X_train -= mean_image
-    X_test -= mean_image
-    X_val -= mean_image
-
     gater = Gater()
-    gater.experts = 5
+    gater.experts = 1
     gater.train_dim = X_train.shape
     gater.test_dim = X_test.shape
     print("==================================================")
