@@ -104,8 +104,8 @@ class Gater(object):
         dim_inputs_data = Input(shape=(30,))
         dim_mlp_yhat = Input(shape=(self.target * self.experts,))
 
-        layer_1 = Dense(5, activation='linear')(dim_inputs_data)
-        layer_3 = Dense(self.experts, name='layer_op', activation='linear', use_bias=False)(layer_1)
+        layer_1 = Dense(1, activation='linear')(dim_inputs_data)
+        layer_3 = Dense(self.experts, name='layer_op', activation='sigmoid', use_bias=False)(layer_1)
         layer_4 = Lambda(self.tensor_product)([layer_3, dim_mlp_yhat])
         #saida da rede 5 423 - 30 - 34
         layer_5 = Dense(1, activation='linear')(layer_4)
@@ -194,7 +194,7 @@ def main():
     mat_contents = sio.loadmat('dados.mat')
 
 
-    X_train, X_test, y_train, y_test = train_test_split(mat_contents['X'], mat_contents['Y'], test_size=0.2, random_state=1, stratify=mat_contents['Y'])
+    X_train, X_test, y_train, y_test = train_test_split(mat_contents['X'], mat_contents['Y'], test_size=0.5, random_state=1, stratify=mat_contents['Y'])
     X_val = X_test
     y_val = y_test
 
