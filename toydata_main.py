@@ -16,6 +16,7 @@ from utils import load_array, eval_target
 from keras.models import Model
 from keras.layers import Dense, Input, Dropout, Lambda
 from keras import backend as K
+import keras
 
 from sklearn.model_selection import train_test_split
 
@@ -77,11 +78,12 @@ class Gater(object):
         model = nn_models()
         model.ip_shape = X.shape
         model = model.linearModel()
-        model.fit(X, y, batch_size=8, epochs=10, validation_data=(x_val, y_val),
+        print('-------------Train train_model Expert------------')
+        model.fit(X, y, batch_size=16, epochs=50, validation_data=(x_val, y_val),
                   verbose=1, callbacks=[self.early_stopping])
 
-        yhat_train = model.predict(X, batch_size=8)
-        yhat_val = model.predict(x_val, batch_size=8)
+        yhat_train = model.predict(X, batch_size=16)
+        yhat_val = model.predict(x_val, batch_size=16)
 
         train_error = eval_target(yhat_train, y)
         val_error = eval_target(yhat_val, y_val)
@@ -99,20 +101,18 @@ class Gater(object):
     def gater(self):
         #output da saida da rede convolucional dense2
         #dim_inputs_data = Input(shape=(84, ))
-        dim_inputs_data = Input(shape=(32,))
+        dim_inputs_data = Input(shape=(30,))
         dim_mlp_yhat = Input(shape=(self.target * self.experts,))
 
-        layer_1 = Dense(50, activation='relu')(dim_inputs_data)
-        layer_1_a = Dropout(0.5)(layer_1)
-        layer_2 = Dense(50, activation='relu')(layer_1_a)
-        layer_2_a = Dropout(0.5)(layer_2)
-        layer_3 = Dense(self.experts, name='layer_op', activation='relu', use_bias=False)(layer_2_a)
+        layer_1 = Dense(5, activation='linear')(dim_inputs_data)
+        layer_3 = Dense(self.experts, name='layer_op', activation='linear', use_bias=False)(layer_1)
         layer_4 = Lambda(self.tensor_product)([layer_3, dim_mlp_yhat])
         #saida da rede 5 423 - 30 - 34
-        layer_5 = Dense(1, activation='softmax')(layer_4)
-
+        layer_5 = Dense(1, activation='linear')(layer_4)
         model = Model(inputs=[dim_inputs_data, dim_mlp_yhat], outputs=layer_5)
-        model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+        #optimizer = keras.optimizers.RMSprop(0.0099)
+        SGD = keras.optimizers.SGD(lr=0.01, nesterov=True)
+        model.compile(loss='mean_squared_error', optimizer=SGD, metrics=['accuracy'])
         return model
 
     def main(self, x_train, y_train, x_test, y_test, x_val, y_val):
@@ -139,9 +139,9 @@ class Gater(object):
                 y = y_train[split_buckets[j]]
 
                 model = self.train_model(X, y, x_val, y_val, i)
-                yhats_train = model.predict(x_train, batch_size=8)
-                yhats_test = model.predict(x_test, batch_size=8)
-                yhats_val = model.predict(x_val, batch_size=8)
+                yhats_train = model.predict(x_train, batch_size=16)
+                yhats_test = model.predict(x_test, batch_size=16)
+                yhats_val = model.predict(x_val, batch_size=16)
 
                 exp_tre = eval_target(yhats_train, y_train)
                 exp_tte = eval_target(yhats_test, y_test)
@@ -160,14 +160,15 @@ class Gater(object):
             yhat_val = np.hstack(experts_out_val)
 
             model = self.gater()
+            print('-------------Train Gater------------')
             history = model.fit([prime_op_tr, yhat_tr], y_train, shuffle=True,
-                                batch_size=8, verbose=1,
+                                batch_size=16, verbose=1,
                                 validation_data=([prime_op_v, yhat_val], y_val),
-                                epochs=10, callbacks=[self.early_stopping])
+                                epochs=50, callbacks=[self.early_stopping])
 
-            yhats_train = model.predict([prime_op_tr, yhat_tr], batch_size=8)
-            yhats_test = model.predict([prime_op_tt, yhat_tt], batch_size=8)
-            yhats_val = model.predict([prime_op_v, yhat_val], batch_size=8)
+            yhats_train = model.predict([prime_op_tr, yhat_tr], batch_size=16)
+            yhats_test = model.predict([prime_op_tt, yhat_tt], batch_size=16)
+            yhats_val = model.predict([prime_op_v, yhat_val], batch_size=16)
 
             tre = eval_target(yhats_train, y_train)
             tte = eval_target(yhats_test, y_test)
@@ -194,11 +195,13 @@ def main():
 
 
     X_train, X_test, y_train, y_test = train_test_split(mat_contents['X'], mat_contents['Y'], test_size=0.2, random_state=1, stratify=mat_contents['Y'])
+    X_val = X_test
+    y_val = y_test
 
-    X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.25, random_state=1, stratify=y_train)
+    #X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.25, random_state=1, stratify=y_train)
 
     gater = Gater()
-    gater.experts = 1
+    gater.experts = 2
     gater.train_dim = X_train.shape
     gater.test_dim = X_test.shape
     print("==================================================")

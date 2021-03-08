@@ -49,8 +49,8 @@ def eval_target(y_hat, y):
     #cm = confusion_matrix(y, y_hat)
     acc = accuracy_score(y, y_hat)
     error = (1 - acc) * 100
-    return acc
-    #return error
+    #return acc
+    return error
 
 
 def comparison(y, y_hat):

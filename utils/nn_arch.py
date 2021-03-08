@@ -25,10 +25,10 @@ class nn_models():
         model = Sequential()
         #model.add(Dense(units=32, activation='relu', input_shape=self.ip_shape[1:], name='conv1'))
         #model.add(Dense(units=32, activation='relu', name='dense1'))
-        model.add(Dense(units=32, activation='relu', input_shape=self.ip_shape[1:], name='dense2'))
+        model.add(Dense(units=30, activation='linear', input_shape=self.ip_shape[1:], name='dense2'))
         model.add(Dense(units=1))
         optimizer = keras.optimizers.RMSprop(0.0099)
-        model.compile(loss='mean_squared_error', optimizer=optimizer)
+        model.compile(loss='mean_squared_error', optimizer=optimizer, metrics=['accuracy'])
         return model
 
     def ResNet50(self):
