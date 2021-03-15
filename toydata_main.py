@@ -17,6 +17,8 @@ from keras.models import Model
 from keras.layers import Dense, Input, Dropout, Lambda
 from keras import backend as K
 import keras
+import pandas as pd
+#import tensorflow as tf
 
 from sklearn.model_selection import train_test_split
 
@@ -28,10 +30,10 @@ class Gater(object):
         self.train_dim = None
         self.test_dim = None
         #iteracoes pra pegar o sample da expert
-        self.iters = 3
+        self.iters = 5
         self.wm_xi = None
         #saida da rede 5 423 - 30 - 34
-        self.target = 1
+        self.target = 2
         self.early_stopping = CustomCallback()
         self.c = 1
         self.warn_log = [["Iter", "Expert Training Error", "Expert Val Error"]]
@@ -79,7 +81,7 @@ class Gater(object):
         model.ip_shape = X.shape
         model = model.linearModel()
         print('-------------Train train_model Expert------------')
-        model.fit(X, y, batch_size=16, epochs=50, validation_data=(x_val, y_val),
+        model.fit(X, y, batch_size=16, epochs=5, validation_data=(x_val, y_val),
                   verbose=1, callbacks=[self.early_stopping])
 
         yhat_train = model.predict(X, batch_size=16)
@@ -101,18 +103,20 @@ class Gater(object):
     def gater(self):
         #output da saida da rede convolucional dense2
         #dim_inputs_data = Input(shape=(84, ))
-        dim_inputs_data = Input(shape=(30,))
-        dim_mlp_yhat = Input(shape=(self.target * self.experts,))
+        dim_inputs_data = Input(shape=(30,),name='dim_inputs_data')
+        dim_mlp_yhat = Input(shape=(self.target * self.experts,),name='dim_mlp_yhat')
 
-        layer_1 = Dense(1, activation='linear')(dim_inputs_data)
+        layer_1 = Dense(2, activation='sigmoid',name='layer_1')(dim_inputs_data)
         layer_3 = Dense(self.experts, name='layer_op', activation='sigmoid', use_bias=False)(layer_1)
-        layer_4 = Lambda(self.tensor_product)([layer_3, dim_mlp_yhat])
+        layer_4 = Lambda(self.tensor_product,name='layer_4')([layer_3, dim_mlp_yhat])
         #saida da rede 5 423 - 30 - 34
-        layer_5 = Dense(1, activation='linear')(layer_4)
+        layer_5 = Dense(2, activation='sigmoid',name='layer_5')(layer_4)
         model = Model(inputs=[dim_inputs_data, dim_mlp_yhat], outputs=layer_5)
         #optimizer = keras.optimizers.RMSprop(0.0099)
         SGD = keras.optimizers.SGD(lr=0.01, nesterov=True)
-        model.compile(loss='mean_squared_error', optimizer=SGD, metrics=['accuracy'])
+        model.compile(loss='binary_crossentropy', optimizer=SGD, metrics=['accuracy'])
+        print(model.summary())
+        keras.utils.plot_model(model, to_file='gater.png',  show_shapes=True, show_layer_names=True)
         return model
 
     def main(self, x_train, y_train, x_test, y_test, x_val, y_val):
@@ -164,7 +168,7 @@ class Gater(object):
             history = model.fit([prime_op_tr, yhat_tr], y_train, shuffle=True,
                                 batch_size=16, verbose=1,
                                 validation_data=([prime_op_v, yhat_val], y_val),
-                                epochs=50, callbacks=[self.early_stopping])
+                                epochs=5, callbacks=[self.early_stopping])
 
             yhats_train = model.predict([prime_op_tr, yhat_tr], batch_size=16)
             yhats_test = model.predict([prime_op_tt, yhat_tt], batch_size=16)
@@ -192,9 +196,15 @@ def main():
     start_time = time.time()
     print('##### NEW EXPERIMENT_' + str(start_time) + '_#####')
     mat_contents = sio.loadmat('dados.mat')
-
-
-    X_train, X_test, y_train, y_test = train_test_split(mat_contents['X'], mat_contents['Y'], test_size=0.5, random_state=1, stratify=mat_contents['Y'])
+    labels = []
+    for i in mat_contents['Y']:
+        if i == -1:
+            labels.append(0)
+        else:
+            labels.append(1)
+    labels_one_hot = pd.get_dummies(labels).to_numpy()
+    #labels_one_hot = np.asarray(labels)
+    X_train, X_test, y_train, y_test = train_test_split(mat_contents['X'], labels_one_hot, test_size=0.5, random_state=1, stratify=labels_one_hot)
     X_val = X_test
     y_val = y_test
 
