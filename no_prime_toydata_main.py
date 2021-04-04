@@ -32,7 +32,7 @@ class Gater(object):
         self.train_dim = None
         self.test_dim = None
         #iteracoes pra pegar o sample da expert
-        self.iters = 5
+        self.iters = 3
         self.wm_xi = None
         #saida da rede 5 423 - 30 - 34
         self.target = 2
@@ -64,6 +64,7 @@ class Gater(object):
 
     def get_random(self):
         local_expert = {}
+        # para cada entrada [1, 0, 1, 1,...] escolher qual especialista vai atuar [1, , 1, 1, 0, 0] significa que o especialista 1 vai atuar nas 3 primeras entradas e o especialista 0 vai atuar nas 2 ultimas
         random_bucket = np.random.choice(self.experts, self.train_dim[0])
         for i, e in enumerate(random_bucket):
             if e not in local_expert:
@@ -82,8 +83,8 @@ class Gater(object):
         model = nn_models()
         model.ip_shape = X.shape
         model = model.linearModel()
-        print('-------------Train train_model Expert------------')
-        history = model.fit(X, y, batch_size=16, epochs=50, validation_data=(x_val, y_val),
+        print('-------------Train train_model Expert------------ {}'.format(i))
+        history = model.fit(X, y, batch_size=16, epochs=2, validation_data=(x_val, y_val),
                   verbose=1, callbacks=[self.early_stopping])
         HISTORY = []
         HISTORY.append(history)
@@ -92,7 +93,7 @@ class Gater(object):
         VALIDATION_ACCURACY.append(1)
         VALIDATION_LOSS.append(2)
 
-        write_results(str(time.time())+'_Expert.txt', VALIDATION_ACCURACY, VALIDATION_LOSS, HISTORY)
+        #write_results(str(time.time())+'_Expert.txt', VALIDATION_ACCURACY, VALIDATION_LOSS, HISTORY)
 
         yhat_train = model.predict(X, batch_size=16)
         yhat_val = model.predict(x_val, batch_size=16)
@@ -111,45 +112,47 @@ class Gater(object):
         return y
 
     def gater(self):
-        #output da saida da rede convolucional dense2
-        #dim_inputs_data = Input(shape=(84, ))
-        dim_inputs_data = Input(shape=(30,),name='dim_inputs_data')
-        dim_mlp_yhat = Input(shape=(self.target * self.experts,),name='dim_mlp_yhat')
+        # ENTRADAS da GATE
+        # entrada dos dados de treinamento
+        dim_inputs_data = Input(shape=(2, ))
+        # entrada da gate com as saidas dos especialista (numero de classes * numero especialistas)
+        dim_mlp_yhat = Input(shape=(self.target * self.experts,))
 
-        layer_1 = Dense(2, activation='sigmoid',name='layer_1')(dim_inputs_data)
-        layer_3 = Dense(self.experts, name='layer_op', activation='sigmoid', use_bias=False)(layer_1)
-        layer_4 = Lambda(self.tensor_product,name='layer_4')([layer_3, dim_mlp_yhat])
-        #saida da rede 5 423 - 30 - 34
-        layer_5 = Dense(2, activation='sigmoid',name='layer_5')(layer_4)
+        #Gate com saída linear e 1 neuronio na camada de ativacao
+        layer_1 = Dense(1, activation='linear')(dim_inputs_data)
+        # camada com a qdt de neuronios igual a qtd de especialistas
+        layer_3 = Dense(self.experts, name='layer_op', activation='relu', use_bias=False)(layer_1)
+
+        # Aqui realiza a multiplicação das saidas dos especialistas com os dados de entrada na Gating
+        layer_4 = Lambda(self.tensor_product)([layer_3, dim_mlp_yhat])
+
+        # SAIDA da Gating = qtd de classes
+        layer_5 = Dense(2, activation='softmax')(layer_4)
+
+        # link de todas as camadas criadas anteriormente
         model = Model(inputs=[dim_inputs_data, dim_mlp_yhat], outputs=layer_5)
-        #optimizer = keras.optimizers.RMSprop(0.0099)
+        # optimizer = keras.optimizers.RMSprop(0.0099)
         SGD = keras.optimizers.SGD(lr=0.01, nesterov=True)
         model.compile(loss='binary_crossentropy', optimizer=SGD, metrics=['acc'])
         print(model.summary())
-        keras.utils.plot_model(model, to_file='gater.png',  show_shapes=True, show_layer_names=True)
+        # keras.utils.plot_model(model, to_file='gater1.png',  show_shapes=True, show_layer_names=True)
         return model
 
     def main(self, x_train, y_train, x_test, y_test, x_val, y_val):
-        print("############################# Prime Train ################################")
-        model_prime = nn_models()
-        model_prime.ip_shape = x_train.shape
-        model_p = model_prime.linearModel()
-
-        model_prime = Model(inputs=model_p.input,
-                            outputs=model_p.get_layer('dense2').output)
-
-        prime_op_tr = model_prime.predict(x_train)
-        prime_op_tt = model_prime.predict(x_test)
-        prime_op_v = model_prime.predict(x_val)
+        print("############################# Gater MAIN ################################")
 
         for i in range(self.iters):
             print("self.iters ============================ {}".format(i))
+            # aqui fala onde cada especialista vai atuar em relação a entrada dos dados
             split_buckets = self.bucket_function(i)
-
+            #cria os vetores de saida dos especialistas
             experts_out_train = []
             experts_out_test = []
             experts_out_val = []
+            # Aqui separa os dados de treino que vai para cada especialista
             for j in sorted(split_buckets):
+                print("========treinando especialista ======== {}".format(j))
+                # aqui separa para cada especialista os dados que serao usados para treinar cada especialista
                 X = x_train[split_buckets[j]]
                 y = y_train[split_buckets[j]]
 
@@ -169,17 +172,27 @@ class Gater(object):
                 experts_out_train.append(yhats_train)
                 experts_out_test.append(yhats_test)
                 experts_out_val.append(yhats_val)
-
+            # Aqui pega as saidas dos especialista para cada classe
+            # especilista 0
+            # iteracao 0 = 0.9
+            # iteracao 1 = 0.23
+            # especilista 1
+            # iteracao 0 = 0.8
+            # iteracao 1 = 0.50
+            # e coloca no formato de coluna
+            # iteracao 0  iteracao 1
+            # especialista 0 especilista 1 especialista 0 especilista 1
+            # [0.9 0.23 0.8 0.50]
             yhat_tr = np.hstack(experts_out_train)
             yhat_tt = np.hstack(experts_out_test)
             yhat_val = np.hstack(experts_out_val)
 
             model = self.gater()
             print('-------------Train Gater------------')
-            history = model.fit([prime_op_tr, yhat_tr], y_train, shuffle=True,
+            history = model.fit( [x_train, yhat_tr], y_train, shuffle=True,
                                 batch_size=16, verbose=1,
-                                validation_data=([prime_op_v, yhat_val], y_val),
-                                epochs=50, callbacks=[self.early_stopping])
+                                validation_data=([x_val, yhat_val], y_val),
+                                epochs=2, callbacks=[self.early_stopping])
             HISTORY = []
             HISTORY.append(history)
             VALIDATION_ACCURACY = []
@@ -187,11 +200,11 @@ class Gater(object):
             VALIDATION_ACCURACY.append(1)
             VALIDATION_LOSS.append(2)
 
-            write_results(str(time.time()) + '_gater.txt', VALIDATION_ACCURACY, VALIDATION_LOSS, HISTORY)
+            #write_results(str(time.time()) + '_gater.txt', VALIDATION_ACCURACY, VALIDATION_LOSS, HISTORY)
 
-            yhats_train = model.predict([prime_op_tr, yhat_tr], batch_size=16)
-            yhats_test = model.predict([prime_op_tt, yhat_tt], batch_size=16)
-            yhats_val = model.predict([prime_op_v, yhat_val], batch_size=16)
+            yhats_train = model.predict([x_train, yhat_tr], batch_size=16)
+            yhats_test = model.predict([x_test, yhat_tt], batch_size=16)
+            yhats_val = model.predict([x_val, yhat_val], batch_size=16)
 
             tre = eval_target(yhats_train, y_train)
             tte = eval_target(yhats_test, y_test)
@@ -205,7 +218,7 @@ class Gater(object):
             expert_units = Model(inputs=model.input,
                                  outputs=model.get_layer('layer_op').output)
 
-            self.wm_xi = expert_units.predict([prime_op_tr, yhat_tr])
+            self.wm_xi = expert_units.predict([x_train, yhat_tr])
 
         return None
 

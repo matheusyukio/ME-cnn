@@ -26,8 +26,8 @@ class nn_models():
         model.add(Dense(units=30, activation='sigmoid', input_shape=self.ip_shape[1:], name='dense2'))
         model.add(Dense(units=2))
         optimizer = keras.optimizers.RMSprop(0.0099)
-        model.compile(loss='binary_crossentropy', optimizer=optimizer, metrics=['accuracy'])
-        keras.utils.plot_model(model, to_file='expert.png', show_shapes=True, show_layer_names=True)
+        model.compile(loss='binary_crossentropy', optimizer=optimizer, metrics=['acc'])
+        #keras.utils.plot_model(model, to_file='expert.png', show_shapes=True, show_layer_names=True)
         return model
 
     def ResNet50(self):

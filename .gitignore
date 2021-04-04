@@ -5,3 +5,4 @@ __pycache__
 validation_data_Inception2_5_1
 training_data_Inception2_5_1
 *.png
+*.txt
